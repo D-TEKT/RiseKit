@@ -48,6 +48,8 @@ private:
     rise::AutoRamp ramp;
     int currentProgram = 0;
 
+    std::atomic<float>* raw (const char* id) { return apvts.getRawParameterValue (id); }
+
     std::atomic<float>* pSmile = nullptr;
     std::atomic<float>* pRise = nullptr;
     std::atomic<float>* pLength = nullptr;
@@ -56,10 +58,17 @@ private:
     std::atomic<float>* pFilter = nullptr;
     std::atomic<float>* pResonance = nullptr;
     std::atomic<float>* pPhaser = nullptr;
-    std::atomic<float>* pReverb = nullptr;
     std::atomic<float>* pDrive = nullptr;
     std::atomic<float>* pWidth = nullptr;
     std::atomic<float>* pChop = nullptr;
+    std::atomic<float>* pReverb = nullptr;
+    std::atomic<float>* pDecay = nullptr;
+    std::atomic<float>* pReverbType = nullptr;
+    std::atomic<float>* pDelay = nullptr;
+    std::atomic<float>* pFeedback = nullptr;
+    std::atomic<float>* pDelayTime = nullptr;
+    std::atomic<float>* pPingPong = nullptr;
+    std::atomic<float>* pWash = nullptr;
     std::atomic<float>* pRide = nullptr;
     std::atomic<float>* pMix = nullptr;
     std::atomic<float>* pOutput = nullptr;

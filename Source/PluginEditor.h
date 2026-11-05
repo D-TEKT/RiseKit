@@ -59,6 +59,7 @@ private:
 
     RiseKitProcessor& proc;
     RiseLook look;
+    juce::TooltipWindow tooltips { this, 600 };
 
     juce::ComboBox presetBox;
 
@@ -77,12 +78,18 @@ private:
     juce::ToggleButton safetyButton { "Safety clip" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> safetyAttachment;
 
+    juce::ComboBox reverbTypeBox, delayTimeBox;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> reverbTypeAttachment, delayTimeAttachment;
+
+    juce::ToggleButton pingPongButton { "Ping-pong" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> pingPongAttachment;
+
     std::vector<std::unique_ptr<Knob>> knobs;
     Knob* curveKnob = nullptr;
-    std::vector<Knob*> characterKnobs, outputKnobs;
+    std::vector<Knob*> characterKnobs, spaceKnobs, outputKnobs;
 
     // Layout areas (set in resized, drawn in paint)
-    juce::Rectangle<int> dialPanel, risePanel, characterPanel, outputPanel, progressArea;
+    juce::Rectangle<int> dialPanel, risePanel, characterPanel, spacePanel, outputPanel, progressArea;
 
     float shownLive = -1.0f, shownProgress = -1.0f;
     int shownProgram = -1;

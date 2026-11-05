@@ -16,6 +16,14 @@ namespace
             .withStringFromValueFunction ([] (float v, int) { return (v > 0.0f ? "+" : "") + juce::String (v, 1) + " dB"; })
             .withValueFromStringFunction ([] (const juce::String& t) { return t.getFloatValue(); });
     }
+
+    template <size_t N>
+    juce::StringArray toStringArray (const std::array<const char*, N>& names)
+    {
+        juce::StringArray out;
+        for (auto* n : names) out.add (n);
+        return out;
+    }
 }
 
 RiseKitProcessor::RiseKitProcessor()
@@ -24,32 +32,41 @@ RiseKitProcessor::RiseKitProcessor()
                         .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMS", createLayout())
 {
-    pSmile     = apvts.getRawParameterValue (params::smile);
-    pRise      = apvts.getRawParameterValue (params::rise);
-    pLength    = apvts.getRawParameterValue (params::length);
-    pCurve     = apvts.getRawParameterValue (params::curve);
-    pAutoDrop  = apvts.getRawParameterValue (params::autoDrop);
-    pFilter    = apvts.getRawParameterValue (params::filter);
-    pResonance = apvts.getRawParameterValue (params::resonance);
-    pPhaser    = apvts.getRawParameterValue (params::phaser);
-    pReverb    = apvts.getRawParameterValue (params::reverb);
-    pDrive     = apvts.getRawParameterValue (params::drive);
-    pWidth     = apvts.getRawParameterValue (params::width);
-    pChop      = apvts.getRawParameterValue (params::chop);
-    pRide      = apvts.getRawParameterValue (params::ride);
-    pMix       = apvts.getRawParameterValue (params::mix);
-    pOutput    = apvts.getRawParameterValue (params::output);
-    pSafety    = apvts.getRawParameterValue (params::safety);
+    pSmile      = raw (params::smile);
+    pRise       = raw (params::rise);
+    pLength     = raw (params::length);
+    pCurve      = raw (params::curve);
+    pAutoDrop   = raw (params::autoDrop);
+    pFilter     = raw (params::filter);
+    pResonance  = raw (params::resonance);
+    pPhaser     = raw (params::phaser);
+    pDrive      = raw (params::drive);
+    pWidth      = raw (params::width);
+    pChop       = raw (params::chop);
+    pReverb     = raw (params::reverb);
+    pDecay      = raw (params::decay);
+    pReverbType = raw (params::reverbType);
+    pDelay      = raw (params::delay);
+    pFeedback   = raw (params::feedback);
+    pDelayTime  = raw (params::delayTime);
+    pPingPong   = raw (params::pingPong);
+    pWash       = raw (params::wash);
+    pRide       = raw (params::ride);
+    pMix        = raw (params::mix);
+    pOutput     = raw (params::output);
+    pSafety     = raw (params::safety);
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout RiseKitProcessor::createLayout()
 {
     using namespace juce;
     std::vector<std::unique_ptr<RangedAudioParameter>> p;
+    const auto& c = params::presets[0];   // defaults = "Classic Smile"
 
-    auto unit = [&] (const char* id, const char* name, float def)
+    // version 1 = first release, version 2 = added in the delay/reverb update
+    auto unit = [&] (const char* id, const char* name, float def, int version = 1)
     {
-        p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name,
+        p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { id, version }, name,
                                                             NormalisableRange<float> (0.0f, 1.0f), def, percent()));
     };
 
@@ -63,7 +80,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RiseKitProcessor::createLayo
                                                          lengths, params::defaultLengthIndex));
 
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { params::curve, 1 }, "Curve",
-                                                        NormalisableRange<float> (-1.0f, 1.0f), 0.5f,
+                                                        NormalisableRange<float> (-1.0f, 1.0f), c.curve,
                                                         AudioParameterFloatAttributes()
                                                             .withStringFromValueFunction ([] (float v, int)
                                                             {
@@ -72,16 +89,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout RiseKitProcessor::createLayo
                                                             })));
     p.push_back (std::make_unique<AudioParameterBool> (ParameterID { params::autoDrop, 1 }, "Auto Drop", false));
 
-    unit (params::filter,    "Filter",    0.80f);
-    unit (params::resonance, "Resonance", 0.30f);
-    unit (params::phaser,    "Phaser",    0.50f);
-    unit (params::reverb,    "Reverb",    0.55f);
-    unit (params::drive,     "Drive",     0.30f);
-    unit (params::width,     "Width",     0.60f);
-    unit (params::chop,      "Chop",      0.00f);
+    unit (params::filter,    "Filter",    c.filter);
+    unit (params::resonance, "Resonance", c.resonance);
+    unit (params::phaser,    "Phaser",    c.phaser);
+    unit (params::drive,     "Drive",     c.drive);
+    unit (params::width,     "Width",     c.width);
+    unit (params::chop,      "Chop",      c.chop);
+
+    unit (params::reverb,    "Reverb",    c.reverb);
+    unit (params::decay,     "Decay",     c.decay, 2);
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { params::reverbType, 2 }, "Reverb Type",
+                                                         toStringArray (params::reverbTypeNames), c.reverbType));
+    unit (params::delay,     "Delay",     c.delay, 2);
+    unit (params::feedback,  "Feedback",  c.feedback, 2);
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { params::delayTime, 2 }, "Delay Time",
+                                                         toStringArray (params::delayTimeNames), params::defaultDelayTimeIndex));
+    p.push_back (std::make_unique<AudioParameterBool> (ParameterID { params::pingPong, 2 }, "Ping-Pong", c.pingPong));
+    unit (params::wash,      "Wash",      c.wash, 2);
 
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { params::ride, 1 }, "Level Ride",
-                                                        NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 2.0f, decibels()));
+                                                        NormalisableRange<float> (-12.0f, 12.0f, 0.1f), c.ride, decibels()));
     unit (params::mix, "Mix", 1.0f);
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { params::output, 1 }, "Output",
                                                         NormalisableRange<float> (-24.0f, 12.0f, 0.1f), 0.0f, decibels()));
@@ -115,9 +142,9 @@ void RiseKitProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
 
     // Host tempo / position
     double bpm = 128.0, ppq = -1.0, beatsPerBar = 4.0;
-    if (auto* playHead = getPlayHead())
+    if (auto* ph = getPlayHead())
     {
-        if (auto pos = playHead->getPosition())
+        if (auto pos = ph->getPosition())
         {
             if (auto b = pos->getBpm())          bpm = *b;
             if (pos->getIsPlaying())
@@ -139,10 +166,17 @@ void RiseKitProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     s.filter     = pFilter->load();
     s.resonance  = pResonance->load();
     s.phaser     = pPhaser->load();
-    s.reverb     = pReverb->load();
     s.drive      = pDrive->load();
     s.width      = pWidth->load();
     s.chop       = pChop->load();
+    s.reverb     = pReverb->load();
+    s.decay      = pDecay->load();
+    s.reverbType = juce::roundToInt (pReverbType->load());
+    s.delay      = pDelay->load();
+    s.feedback   = pFeedback->load();
+    s.delayTime  = juce::roundToInt (pDelayTime->load());
+    s.pingPong   = pPingPong->load() > 0.5f;
+    s.wash       = pWash->load();
     s.rideDb     = pRide->load();
     s.mix        = pMix->load();
     s.outputDb   = pOutput->load();
@@ -170,15 +204,22 @@ void RiseKitProcessor::setCurrentProgram (int index)
             param->setValueNotifyingHost (param->convertTo0to1 (value));
     };
 
-    set (params::filter,    pr.filter);
-    set (params::resonance, pr.resonance);
-    set (params::phaser,    pr.phaser);
-    set (params::reverb,    pr.reverb);
-    set (params::drive,     pr.drive);
-    set (params::width,     pr.width);
-    set (params::chop,      pr.chop);
-    set (params::ride,      pr.ride);
-    set (params::curve,     pr.curve);
+    set (params::filter,     pr.filter);
+    set (params::resonance,  pr.resonance);
+    set (params::phaser,     pr.phaser);
+    set (params::drive,      pr.drive);
+    set (params::width,      pr.width);
+    set (params::chop,       pr.chop);
+    set (params::reverb,     pr.reverb);
+    set (params::decay,      pr.decay);
+    set (params::reverbType, (float) pr.reverbType);
+    set (params::delay,      pr.delay);
+    set (params::feedback,   pr.feedback);
+    set (params::delayTime,  (float) pr.delayTime);
+    set (params::pingPong,   pr.pingPong ? 1.0f : 0.0f);
+    set (params::wash,       pr.wash);
+    set (params::ride,       pr.ride);
+    set (params::curve,      pr.curve);
 }
 
 const juce::String RiseKitProcessor::getProgramName (int index)

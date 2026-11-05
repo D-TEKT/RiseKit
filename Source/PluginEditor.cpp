@@ -231,21 +231,42 @@ RiseKitEditor::RiseKitEditor (RiseKitProcessor& p)
     addAndMakeVisible (safetyButton);
     safetyAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment> (apvts, params::safety, safetyButton);
 
+    // Space section choices
+    if (auto* choice = dynamic_cast<AudioParameterChoice*> (apvts.getParameter (params::reverbType)))
+        reverbTypeBox.addItemList (choice->choices, 1);
+    addAndMakeVisible (reverbTypeBox);
+    reverbTypeAttachment = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment> (apvts, params::reverbType, reverbTypeBox);
+
+    if (auto* choice = dynamic_cast<AudioParameterChoice*> (apvts.getParameter (params::delayTime)))
+        delayTimeBox.addItemList (choice->choices, 1);
+    addAndMakeVisible (delayTimeBox);
+    delayTimeAttachment = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment> (apvts, params::delayTime, delayTimeBox);
+
+    addAndMakeVisible (pingPongButton);
+    pingPongAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment> (apvts, params::pingPong, pingPongButton);
+
     curveKnob = &addKnob (params::curve, "Curve", true);
 
     characterKnobs = { &addKnob (params::filter,    "Filter"),
                        &addKnob (params::resonance, "Reso"),
                        &addKnob (params::phaser,    "Phaser"),
-                       &addKnob (params::reverb,    "Reverb"),
                        &addKnob (params::drive,     "Drive"),
                        &addKnob (params::width,     "Width"),
                        &addKnob (params::chop,      "Chop") };
+
+    spaceKnobs = { &addKnob (params::reverb,   "Reverb"),
+                   &addKnob (params::decay,    "Decay"),
+                   &addKnob (params::delay,    "Delay"),
+                   &addKnob (params::feedback, "Feedback"),
+                   &addKnob (params::wash,     "Wash") };
+
+    spaceKnobs.back()->slider.setTooltip ("Wash: how much of the dry sound disappears into the reverb and delay at full smile.");
 
     outputKnobs = { &addKnob (params::ride,   "Ride", true),
                     &addKnob (params::mix,    "Mix"),
                     &addKnob (params::output, "Output", true) };
 
-    setSize (780, 480);
+    setSize (860, 590);
     startTimerHz (30);
 }
 
@@ -299,12 +320,19 @@ void RiseKitEditor::paint (Graphics& g)
     drawPanel (g, dialPanel, "SMILE");
     drawPanel (g, risePanel, "AUTO RISE");
     drawPanel (g, characterPanel, "CHARACTER  (how much of each effect at full smile)");
+    drawPanel (g, spacePanel, "SPACE  (reverb, delay and how far it washes out)");
     drawPanel (g, outputPanel, "OUTPUT");
 
-    // Labels in the rise panel
+    // Labels above the combo boxes
     g.setColour (colours::textDim);
     g.setFont (font (12.0f, true));
-    g.drawText ("Length", lengthBox.getX(), lengthBox.getY() - 18, lengthBox.getWidth(), 16, Justification::centredLeft);
+    auto labelAbove = [&g] (const Component& c, const String& text)
+    {
+        g.drawText (text, c.getX(), c.getY() - 18, c.getWidth(), 16, Justification::centredLeft);
+    };
+    labelAbove (lengthBox, "Length");
+    labelAbove (reverbTypeBox, "Reverb type");
+    labelAbove (delayTimeBox, "Delay time");
 
     // Rise progress bar
     const float progress = jlimit (0.0f, 1.0f, proc.riseProgress.load());
@@ -343,32 +371,41 @@ void RiseKitEditor::paint (Graphics& g)
 
 void RiseKitEditor::resized()
 {
-    dialPanel      = { 16, 60, 300, 280 };
-    risePanel      = { 328, 60, 436, 280 };
-    characterPanel = { 16, 352, 556, 116 };
-    outputPanel    = { 584, 352, 180, 116 };
+    dialPanel      = { 16, 60, 300, 270 };
+    risePanel      = { 328, 60, 516, 270 };
+    characterPanel = { 16, 342, 536, 112 };
+    outputPanel    = { 564, 342, 280, 112 };
+    spacePanel     = { 16, 466, 828, 112 };
 
-    presetBox.setBounds (getWidth() - 16 - 220, 16, 220, 28);
+    presetBox.setBounds (getWidth() - 16 - 240, 16, 240, 28);
 
     smileDial.setBounds (dialPanel.reduced (18).withTrimmedTop (14));
 
+    // Auto rise
     const int rx = risePanel.getX() + 16, ry = risePanel.getY();
-    riseButton.setBounds (rx, ry + 44, 150, 60);
-    lengthBox.setBounds (rx + 168, ry + 62, 120, 28);
-    placeKnob (*curveKnob, { rx + 304, ry + 30, 100, 96 });
+    riseButton.setBounds (rx, ry + 44, 170, 60);
+    lengthBox.setBounds (rx + 190, ry + 62, 130, 28);
+    placeKnob (*curveKnob, { rx + 350, ry + 30, 120, 96 });
     autoDropButton.setBounds (rx, ry + 140, 220, 24);
     safetyButton.setBounds (rx + 236, ry + 140, 160, 24);
-    progressArea = { rx, ry + 196, risePanel.getWidth() - 32, 14 };
+    progressArea = { rx, ry + 190, risePanel.getWidth() - 32, 14 };
 
     auto placeRow = [this] (const std::vector<Knob*>& row, Rectangle<int> area)
     {
-        area = area.withTrimmedTop (28).reduced (8, 6);
+        area = area.withTrimmedTop (28).reduced (8, 4);
         const int w = area.getWidth() / (int) row.size();
         for (auto* k : row)
             placeKnob (*k, area.removeFromLeft (w));
     };
     placeRow (characterKnobs, characterPanel);
     placeRow (outputKnobs, outputPanel);
+
+    // Space: two choice boxes + ping-pong on the left, knobs on the right
+    const int sx = spacePanel.getX() + 14, sy = spacePanel.getY();
+    reverbTypeBox.setBounds (sx, sy + 50, 140, 26);
+    delayTimeBox.setBounds (sx + 154, sy + 50, 140, 26);
+    pingPongButton.setBounds (sx + 154, sy + 82, 140, 22);
+    placeRow (spaceKnobs, spacePanel.withTrimmedLeft (310));
 }
 
 void RiseKitEditor::timerCallback()
